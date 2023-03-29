@@ -1,6 +1,176 @@
-import { PeopleBody } from 'people/main';
-import React from 'react';
+import { EuiGlobalToastList, EuiLoadingSpinner } from '@elastic/eui';
+import { observer } from 'mobx-react-lite';
+import React, { useEffect, useState } from 'react';
+import { useHistory } from 'react-router';
+import styled from 'styled-components';
+import { SearchTextInput } from '../../components/common';
+import { colors } from '../../config/colors';
+import { useFuse, useIsMobile, usePageScroll, useScreenWidth } from '../../hooks';
+import { useStores } from '../../store';
+import Person from 'people/person';
+import NoResults from 'people/utils/noResults';
+import PageLoadSpinner from 'people/utils/pageLoadSpinner';
+import StartUpModal from 'people/utils/start_up_modal';
+import FirstTimeScreen from 'people/main/firstTimeScreen';
 
-export const PeoplePage = () => {
-  return <PeopleBody />;
-};
+export const PeoplePage = observer(BodyComponent);
+
+const color = colors['light'];
+
+function BodyComponent() {
+  const { main, ui } = useStores();
+  const [loading, setLoading] = useState(true);
+  const screenWidth = useScreenWidth();
+  const [openStartUpModel, setOpenStartUpModel] = useState<boolean>(false);
+  const closeModal = () => setOpenStartUpModel(false);
+  const { peoplePageNumber } = ui;
+
+  const history = useHistory();
+
+  const isMobile = useIsMobile();
+  useEffect(() => {
+    if (ui.meInfo) {
+      main.getTribesByOwner(ui.meInfo.owner_pubkey || '');
+    }
+  }, [main, ui.meInfo]);
+
+  // do search update
+  useEffect(() => {
+    (async () => {
+      await main.getPeople({ page: 1, resetPage: true });
+      setLoading(false);
+    })();
+  }, [ui.searchText, ui.selectingPerson, main]);
+
+  function selectPerson(id: number, unique_name: string, pubkey: string) {
+    ui.setSelectedPerson(id);
+    ui.setSelectingPerson(id);
+
+    history.push(`/p/${pubkey}`);
+  }
+
+  let people = useFuse(main.people, ['owner_alias']);
+  people = (people && people.filter((f) => !f.hide)) || [];
+
+  const loadForwardFunc = () => loadMore(1);
+  const loadBackwardFunc = () => loadMore(-1);
+  const { loadingTop, loadingBottom, handleScroll } = usePageScroll(
+    loadForwardFunc,
+    loadBackwardFunc
+  );
+
+  async function loadMore(direction) {
+    let currentPage = 1;
+    currentPage = peoplePageNumber;
+
+    let newPage = currentPage + direction;
+    if (newPage < 1) newPage = 1;
+    try {
+      await main.getPeople({ page: newPage });
+    } catch (e) {
+      console.log('load failed', e);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Body isMobile={isMobile} style={{ justifyContent: 'center', alignItems: 'center' }}>
+        <EuiLoadingSpinner size="xl" />
+      </Body>
+    );
+  }
+
+  const showFirstTime = ui.meInfo && ui.meInfo.id === 0;
+
+  if (showFirstTime) {
+    return <FirstTimeScreen />;
+  }
+
+  const toastsEl = (
+    <EuiGlobalToastList
+      toasts={ui.toasts}
+      dismissToast={() => ui.setToasts([])}
+      toastLifeTimeMs={3000}
+    />
+  );
+
+  return (
+    <Body
+      isMobile={isMobile}
+      onScroll={(e) => {
+        handleScroll(e);
+      }}
+    >
+      <div className="header">
+        <SearchTextInput
+          small
+          name="search"
+          type="search"
+          placeholder="Search"
+          value={ui.searchText}
+          style={{
+            width: 204,
+            height: 40,
+            border: `1px solid ${color.grayish.G600}`,
+            background: color.grayish.G600
+          }}
+          onChange={(e) => {
+            ui.setSearchText(e);
+          }}
+        />
+      </div>
+      <div className="content">
+        <PageLoadSpinner show={loadingTop} />
+        {(people ?? []).map((t) => (
+          <Person
+            {...t}
+            key={t.id}
+            small={isMobile}
+            squeeze={screenWidth < 1420}
+            selected={ui.selectedPerson === t.id}
+            select={selectPerson}
+          />
+        ))}
+        {!people.length && <NoResults />}
+        <PageLoadSpinner noAnimate show={loadingBottom} />
+      </div>
+
+      {openStartUpModel && (
+        <StartUpModal closeModal={closeModal} dataObject={'getWork'} buttonColor={'primary'} />
+      )}
+      {toastsEl}
+    </Body>
+  );
+}
+
+const Body = styled.div<{ isMobile: boolean }>`
+  flex: 1;
+  height: ${(p) => (p.isMobile ? 'calc(100% - 105px)' : 'calc(100% - 65px)')};
+  background: ${(p) => (p.isMobile ? undefined : color.grayish.G950)};
+  width: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  & > .header {
+    display: flex;
+    justify-content: flex-end;
+    padding: 10px 0;
+  }
+  & > .content {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    height: 100%;
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding: 0px 20px 20px 20px;
+  }
+`;
+
+export const Spacer = styled.div`
+  display: flex;
+  min-height: 10px;
+  min-width: 100%;
+  height: 10px;
+  width: 100%;
+`;

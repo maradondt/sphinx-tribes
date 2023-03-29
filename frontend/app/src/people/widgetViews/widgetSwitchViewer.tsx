@@ -6,7 +6,6 @@ import styled from 'styled-components';
 import { useIsMobile } from '../../hooks';
 import { useStores } from '../../store';
 import { widgetConfigs } from '../utils/constants';
-import { Spacer } from '../main/body';
 import NoResults from '../utils/noResults';
 import { uiStore } from '../../store/ui';
 import DeleteTicketModal from './deleteModal';
@@ -245,4 +244,12 @@ const LoadMoreContainer = styled.div<PanelProps>`
       border: 1px solid ${(p) => p.color && p.color.grayish.G100};
     }
   }
+`;
+
+const Spacer = styled.div`
+  display: flex;
+  min-height: 10px;
+  min-width: 100%;
+  height: 10px;
+  width: 100%;
 `;
