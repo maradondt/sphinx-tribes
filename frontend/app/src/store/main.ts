@@ -7,6 +7,7 @@ import { getHostIncludingDockerHosts } from '../config/host';
 import { randomString } from '../helpers';
 import { TribesURL } from '../config/host';
 import { uiStore } from './ui';
+import { getUserAvatarPlaceholder } from './lib';
 
 export const queryLimit = 100;
 
@@ -430,7 +431,7 @@ export class MainStore {
     }
 
     const headers = {
-      'x-jwt': info.tribe_jwt,
+      'x-jwt': info.jwt,
       'Content-Type': 'application/json'
     };
 
@@ -585,11 +586,26 @@ export class MainStore {
     return ps;
   }
 
+  getUserAvatarPlaceholder(ownerId: string) {
+    return getUserAvatarPlaceholder(ownerId);
+  }
+
   @persist('list')
-  people: Person[] = [];
+  _people: Person[] = [];
+
+  get people() {
+    return this._people.map((person: Person) => ({
+      ...person,
+      img: person.img || this.getUserAvatarPlaceholder(person.owner_pubkey)
+    }));
+  }
+
+  set people(people: Person[]) {
+    this._people = people;
+  }
 
   setPeople(p: Person[]) {
-    this.people = p;
+    this._people = p;
   }
 
   async getPeople(queryParams?: any): Promise<Person[]> {
@@ -1018,7 +1034,18 @@ export class MainStore {
   }
 
   @persist('list')
-  activePerson: Person[] = [];
+  _activePerson: Person[] = [];
+
+  get activePerson() {
+    return this._activePerson.map((person: Person) => ({
+      ...person,
+      img: person.img || this.getUserAvatarPlaceholder(person.owner_pubkey)
+    }));
+  }
+
+  set activePerson(p: Person[]) {
+    this._activePerson = p;
+  }
 
   setActivePerson(p: Person) {
     this.activePerson = [p];
@@ -1098,15 +1125,26 @@ export class MainStore {
   async refreshJwt() {
     try {
       if (!uiStore.meInfo) return null;
+      const info = uiStore.meInfo;
 
-      const res: any = await this.fetchFromRelay('refresh_jwt');
-      const j = await res.json();
+      const r: any = await fetch(`${TribesURL}/refresh_jwt`, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'x-jwt': info.tribe_jwt,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        }
+      });
+
+      const j = await r.json();
 
       if (this.lnToken) {
         this.lnToken = j.jwt;
         return j;
       }
-      return j.response;
+
+      return j;
     } catch (e) {
       console.log('Error refreshJwt: ', e);
       // could not refresh jwt, logout!
@@ -1159,32 +1197,37 @@ export class MainStore {
   }
 
   async saveProfile(body: any) {
+    if (!uiStore.meInfo) return null;
+    const info = uiStore.meInfo;
     if (!body) return; // avoid saving bad state
     if (body.price_to_meet) body.price_to_meet = parseInt(body.price_to_meet); // must be an int
 
     try {
-      let request = 'profile';
-      if (this.lnToken) request = 'person';
-
-      const [r, error] = await this.doCallToRelay('POST', request, body);
-      if (error) throw error;
+      const r = await fetch(`${TribesURL}/person`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ...body
+        }),
+        mode: 'cors',
+        headers: {
+          'x-jwt': info.tribe_jwt,
+          'Content-Type': 'application/json'
+        }
+      });
       if (!r) return; // tor user will return here
-
       // first time profile makers will need this on first login
       if (!body.id) {
         const j = await r.json();
-        if (j.response.id) {
-          body.id = j.response.id;
+        if (j.id) {
+          body.id = j.id;
         }
       }
-
       uiStore.setToasts([
         {
           id: '1',
           title: 'Saved.'
         }
       ]);
-
       await this.getSelf(body);
     } catch (e) {
       console.log('Error saveProfile: ', e);
@@ -1280,7 +1323,7 @@ export class MainStore {
         }),
         mode: 'cors',
         headers: {
-          'x-jwt': info.tribe_jwt,
+          'x-jwt': info.jwt,
           'Content-Type': 'application/json'
         }
       });
@@ -1746,7 +1789,7 @@ export class MainStore {
         method: 'POST',
         mode: 'cors',
         headers: {
-          'x-jwt': info.jwt,
+          'x-jwt': info.tribe_jwt,
           'Content-Type': 'application/json'
         }
       });
