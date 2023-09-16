@@ -11,7 +11,12 @@ export const getTwitterLink = ({ title, issueCreated, ownerPubkey, labels }: Pro
     owner_id: ownerPubkey,
     created: issueCreated
   };
-  const bountyUrl = new URL('https://community.sphinx.chat/tickets');
+  const origin = window.location.origin.includes('localhost')
+    ? 'https://community.sphinx.chat'
+    : window.location.origin;
+
+    const bountyUrl = new URL('/tickets', origin);
+
 
   for (const key in bountyParams) {
     bountyUrl.searchParams.append(key, bountyParams[key]);
@@ -21,8 +26,8 @@ export const getTwitterLink = ({ title, issueCreated, ownerPubkey, labels }: Pro
     text: `I just created a bounty on Sphinx Community: ${title}\n`,
     url: `${bountyUrl}\n`,
     hashtags: [...(labels ?? []), { label: 'sphinxchat', value: '' }]
-    .map((x: CodingLanguageLabel) => x.label)
-    .join(','),
+      .map((x: CodingLanguageLabel) => x.label)
+      .join(',')
   };
 
   const link = new URL('https://twitter.com/intent/tweet');
